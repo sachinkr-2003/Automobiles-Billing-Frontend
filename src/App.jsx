@@ -14,7 +14,17 @@ import Login from './pages/Login'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768)
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'))
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Agar naya session hai toh localStorage clear karo (desktop app restart)
+    const sessionActive = sessionStorage.getItem('session_active')
+    if (!sessionActive) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      sessionStorage.setItem('session_active', 'true')
+      return false
+    }
+    return !!localStorage.getItem('token')
+  })
   const navigate = useNavigate()
   const location = useLocation()
 
