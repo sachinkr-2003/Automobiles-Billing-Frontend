@@ -76,6 +76,13 @@ export default function Vehicles() {
         year: form.year
       })
     })
+    .then(async res => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to save vehicle');
+      }
+      return res.json();
+    })
     .then(() => {
       setForm(empty)
       setEditingId(null)
@@ -85,7 +92,7 @@ export default function Vehicles() {
     })
     .catch(err => {
       console.error(err)
-      Swal.fire({ title: 'Error', text: 'Failed to save vehicle', icon: 'error' })
+      Swal.fire({ title: 'Error', text: err.message || 'Failed to save vehicle', icon: 'error' })
     })
   }
 

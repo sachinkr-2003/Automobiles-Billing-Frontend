@@ -50,14 +50,22 @@ export default function Inventory() {
         stock: Number(form.stock),
         minStock: Number(form.minStock)
       })
-    }).then(() => {
+    })
+    .then(async res => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to add part');
+      }
+      return res.json();
+    })
+    .then(() => {
       setForm(empty)
       setShowModal(false)
       Swal.fire({ title: 'Success', text: 'Part added successfully', icon: 'success', timer: 1500, showConfirmButton: false })
       loadData()
     }).catch(err => {
       console.error(err)
-      Swal.fire({ title: 'Error', text: 'Failed to add part', icon: 'error' })
+      Swal.fire({ title: 'Error', text: err.message || 'Failed to add part', icon: 'error' })
     })
   }
 

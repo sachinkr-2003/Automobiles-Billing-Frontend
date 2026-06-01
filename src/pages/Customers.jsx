@@ -51,10 +51,13 @@ export default function Customers() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: form.name, phone: form.phone, email: form.email, address: form.city })
       })
-      const customer = await res.json()
+      const dataOrError = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(dataOrError.message || 'Failed to save customer')
+      
+      const customer = dataOrError
       
       if (!editingId && form.plate) {
-        await fetch(`${import.meta.env.VITE_API_URL}/vehicles`, {
+        const vRes = await fetch(`${import.meta.env.VITE_API_URL}/vehicles`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -65,6 +68,10 @@ export default function Customers() {
             year: form.year || new Date().getFullYear()
           })
         })
+        if (!vRes.ok) {
+          const vData = await vRes.json().catch(() => ({}))
+          throw new Error(vData.message || 'Failed to add vehicle')
+        }
       }
 
       setForm(empty)
@@ -74,7 +81,7 @@ export default function Customers() {
       loadCustomers()
     } catch (err) {
       console.error(err)
-      Swal.fire({ title: 'Error', text: 'Failed to save customer', icon: 'error' })
+      Swal.fire({ title: 'Error', text: err.message || 'Failed to save customer', icon: 'error' })
     }
   }
 

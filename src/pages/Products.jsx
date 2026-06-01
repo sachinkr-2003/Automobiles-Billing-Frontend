@@ -64,6 +64,13 @@ export default function Products() {
         description: form.duration
       })
     })
+    .then(async res => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to save item');
+      }
+      return res.json();
+    })
     .then(() => {
       setForm(empty)
       setEditingId(null)
@@ -73,7 +80,7 @@ export default function Products() {
     })
     .catch(err => {
       console.error(err)
-      Swal.fire({ title: 'Error', text: 'Failed to save item', icon: 'error' })
+      Swal.fire({ title: 'Error', text: err.message || 'Failed to save item', icon: 'error' })
     })
   }
 
