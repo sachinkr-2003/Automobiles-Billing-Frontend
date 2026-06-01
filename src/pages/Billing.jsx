@@ -1,0 +1,650 @@
+import { useState, useEffect } from 'react'
+import { Plus, Search, Eye, X, CheckCircle, Pencil, Trash2 } from 'lucide-react'
+import Select from 'react-select'
+import CreatableSelect from 'react-select/creatable'
+import { toPng } from 'html-to-image'
+import jsPDF from 'jspdf'
+import Swal from 'sweetalert2'
+
+const statusStyle = {
+  Paid: 'bg-green-100 text-green-700',
+  Pending: 'bg-yellow-100 text-yellow-700',
+  Unpaid: 'bg-red-100 text-red-700',
+}
+
+const empty = { customer: '', vehicle: '', amount: 0, status: 'Pending', paymentMethod: 'Unpaid', date: new Date().toISOString().split('T')[0] }
+
+export default function Billing() {
+  const [bills, setBills] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [vehicles, setVehicles] = useState([])
+  const [productsList, setProductsList] = useState([])
+  
+  const [filter, setFilter] = useState('All')
+  const [search, setSearch] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [viewBill, setViewBill] = useState(null)
+  const [printBill, setPrintBill] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  
+  const [form, setForm] = useState(empty)
+  const [selectedParts, setSelectedParts] = useState([]) // holds added items
+  const [partSearch, setPartSearch] = useState('') // holds the _id of selected service
+  const [partPrice, setPartPrice] = useState(0)
+  const [qty, setQty] = useState(1)
+  const [newCustomerName, setNewCustomerName] = useState('')
+
+  const loadData = () => {
+    fetch('http://localhost:5000/api/bills').then(r=>r.json()).then(data => {
+      const mapped = data.map(b => ({
+        id: `INV-${b._id.slice(-6).toUpperCase()}`,
+        _id: b._id,
+        customerId: b.customer?._id,
+        customer: b.customer?.name || 'Unknown',
+        vehicleId: b.vehicle?._id,
+        vehicle: b.vehicle?.licensePlate || 'Unknown',
+        service: b.items.length + ' Items',
+        parts: b.items.map(i => i.itemName || i.service?.itemName || 'Unknown Item').join(', '),
+        rawItems: b.items,
+        amount: b.totalAmount,
+        date: new Date(b.date).toLocaleDateString(),
+        status: b.status,
+        paymentMethod: b.paymentMethod
+      }))
+      setBills(mapped)
+    }).catch(console.error)
+
+    fetch('http://localhost:5000/api/customers').then(r=>r.json()).then(setCustomers)
+    fetch('http://localhost:5000/api/vehicles').then(r=>r.json()).then(setVehicles)
+    fetch('http://localhost:5000/api/products').then(r=>r.json()).then(setProductsList)
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const filtered = bills.filter(b => {
+    const matchFilter = filter === 'All' || b.status === filter
+    const matchSearch = b.customer.toLowerCase().includes(search.toLowerCase()) || b.id.toLowerCase().includes(search.toLowerCase())
+    return matchFilter && matchSearch
+  })
+
+  function handleAddPart() {
+    if(!partSearch) return;
+    const part = productsList.find(p => p._id === partSearch)
+    if (part) {
+      setSelectedParts([...selectedParts, { ...part, quantity: qty, price: partPrice }])
+      setForm({ ...form, amount: form.amount + (partPrice * qty) })
+      setPartSearch('')
+      setQty(1)
+      setPartPrice(0)
+    }
+  }
+
+  function removePart(index) {
+    const part = selectedParts[index]
+    setSelectedParts(selectedParts.filter((_, i) => i !== index))
+    setForm({ ...form, amount: Math.max(0, form.amount - (part.price * part.quantity)) })
+  }
+
+  async function handleAdd(e) {
+    e.preventDefault()
+
+    let finalParts = [...selectedParts]
+    let finalAmount = form.amount
+
+    if (partSearch) {
+      const part = productsList.find(p => p._id === partSearch)
+      if (part) {
+        finalParts.push({ ...part, quantity: qty, price: partPrice })
+        finalAmount += (partPrice * qty)
+      }
+    }
+
+    if(finalParts.length === 0) {
+      Swal.fire({ title: 'Error', text: 'Please add at least one item from the catalog', icon: 'warning' })
+      return
+    }
+    
+    let customerId = form.customer;
+    if (newCustomerName) {
+      try {
+        const res = await fetch('http://localhost:5000/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCustomerName, phone: '0000000000' })
+        });
+        const data = await res.json();
+        customerId = data._id;
+      } catch (err) {
+        console.error(err);
+        Swal.fire({ title: 'Error', text: 'Failed to create new customer', icon: 'error' })
+        return
+      }
+    }
+
+    if (!customerId) {
+      Swal.fire({ title: 'Error', text: 'Please select or type a customer', icon: 'error' })
+      return
+    }
+
+    const url = editingId ? `http://localhost:5000/api/bills/${editingId}` : 'http://localhost:5000/api/bills'
+    const method = editingId ? 'PUT' : 'POST'
+
+    fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer: customerId,
+        vehicle: form.vehicle ? form.vehicle : undefined,
+        paymentMethod: form.paymentMethod,
+        status: form.paymentMethod === 'Unpaid' ? 'Pending' : 'Paid',
+        items: finalParts.map(p => ({ service: p._id || null, itemName: p.itemName, quantity: p.quantity, price: p.price }))
+      })
+    })
+    .then(async res => {
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'Server error')
+      return data
+    })
+    .then(data => {
+      setForm(empty)
+      setNewCustomerName('')
+      setSelectedParts([])
+      setPartSearch('')
+      setPartPrice(0)
+      setQty(1)
+      setEditingId(null)
+      setShowModal(false)
+      loadData()
+      
+      const mapped = {
+        id: `INV-${data._id.slice(-6).toUpperCase()}`,
+        _id: data._id,
+        customer: data.customer?.name || 'Unknown',
+        vehicle: data.vehicle?.licensePlate || 'Unknown',
+        rawItems: data.items,
+        amount: data.totalAmount,
+        date: new Date(data.date).toLocaleDateString(),
+        status: data.status,
+        paymentMethod: data.paymentMethod
+      };
+      
+      setPrintBill(mapped); // Auto trigger direct download
+      Swal.fire({ title: 'Processing', text: 'Generating PDF...', icon: 'info', timer: 2000, showConfirmButton: false })
+
+    }).catch(err => {
+      console.error('Invoice Error:', err)
+      Swal.fire({ title: 'Error', text: err.message || 'Failed to save invoice', icon: 'error' })
+    })
+  }
+
+  const handleEdit = (b) => {
+    setEditingId(b._id)
+    setForm({
+      customer: b.customerId || '',
+      vehicle: b.vehicleId || '',
+      amount: b.amount,
+      status: b.status,
+      paymentMethod: b.paymentMethod || 'Unpaid',
+      date: new Date().toISOString().split('T')[0]
+    })
+    
+    if (b.rawItems && b.rawItems.length > 0) {
+      const parts = b.rawItems.map(item => ({
+        _id: item.service?._id || null,
+        itemName: item.itemName || item.service?.itemName || 'Unknown',
+        price: item.price,
+        quantity: item.quantity
+      }))
+      setSelectedParts(parts)
+    } else {
+      setSelectedParts([])
+    }
+    
+    setShowModal(true)
+  }
+
+  const handleDelete = (id) => {
+    Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        fetch(`http://localhost:5000/api/bills/${id}`, { method: 'DELETE' })
+          .then(() => {
+            Swal.fire('Deleted!', 'Invoice has been deleted.', 'success')
+            loadData()
+          })
+          .catch(() => Swal.fire('Error!', 'Failed to delete invoice.', 'error'))
+      }
+    })
+  }
+
+  const generatePDFFromElement = (sourceId, filename) => {
+    return new Promise((resolve, reject) => {
+      const sourceElement = document.getElementById(sourceId);
+      if (!sourceElement) return reject(new Error("Layout element not found"));
+
+      const clone = sourceElement.cloneNode(true);
+      clone.style.position = 'fixed';
+      clone.style.top = '0px';
+      clone.style.left = '0px';
+      clone.style.width = '800px';
+      clone.style.zIndex = '-9999';
+      clone.style.background = '#ffffff';
+      
+      document.body.appendChild(clone);
+
+      setTimeout(() => {
+        toPng(clone, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' }).then(imgData => {
+          document.body.removeChild(clone);
+          try {
+            const imgProperties = new Image();
+            imgProperties.src = imgData;
+            imgProperties.onload = () => {
+              const pdf = new jsPDF('p', 'mm', 'a4');
+              const pdfWidth = pdf.internal.pageSize.getWidth();
+              const pdfHeight = (imgProperties.height * pdfWidth) / imgProperties.width;
+              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+              pdf.save(filename);
+              resolve();
+            };
+          } catch (e) {
+            reject(new Error("PDF Creation failed: " + e.message));
+          }
+        }).catch(err => {
+          document.body.removeChild(clone);
+          reject(new Error("Image render failed: " + err.message));
+        });
+      }, 500);
+    });
+  };
+
+  useEffect(() => {
+    if (printBill) {
+      setTimeout(() => {
+        generatePDFFromElement('print-invoice-receipt', `Invoice_${printBill.id}.pdf`)
+          .then(() => {
+            setPrintBill(null);
+            Swal.fire({ title: 'Success', text: 'Invoice downloaded successfully', icon: 'success', timer: 1500, showConfirmButton: false });
+          })
+          .catch(err => {
+            console.error("Auto Download Error:", err);
+            Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
+          });
+      }, 500);
+    }
+  }, [printBill]);
+
+  const handleDownloadPdf = () => {
+    Swal.fire({ title: 'Processing', text: 'Generating PDF...', icon: 'info', timer: 2000, showConfirmButton: false });
+    
+    generatePDFFromElement('view-invoice-receipt', `Invoice_${viewBill.id}.pdf`)
+      .then(() => {
+        Swal.fire({ title: 'Success', text: 'Invoice downloaded successfully', icon: 'success', timer: 1500, showConfirmButton: false });
+      })
+      .catch(err => {
+        console.error("Manual Download Error:", err);
+        Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
+      });
+  };
+
+  const renderInvoiceTemplate = (bill, idStr) => (
+    <div id={idStr} className="bg-white px-10 pt-2 pb-4 flex flex-col mx-auto font-sans" style={{ width: '800px' }}>
+      
+      {/* 1. Header (Top Left) */}
+      <div className="flex justify-between items-center mb-2 px-4">
+        <div className="flex items-center gap-3">
+          <div className="border-[3px] border-black p-1.5 rounded-sm rotate-45">
+            <div className="-rotate-45"><CheckCircle size={24} className="text-black" /></div>
+          </div>
+          <div>
+            <h1 className="text-[28px] font-black text-gray-900 leading-none tracking-tight">AutoBill</h1>
+            <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold mt-1">Premium Service</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Yellow Ribbon & INVOICE Text */}
+      <div className="flex items-center w-full mb-3">
+        <div className="h-6 bg-[#FFC107] flex-grow"></div>
+        <h1 className="text-[32px] font-light text-[#2D3035] px-4 tracking-[0.15em] leading-none">INVOICE</h1>
+        <div className="h-6 bg-[#FFC107] w-12"></div>
+      </div>
+
+      {/* 3. Invoice To & Invoice Details */}
+      <div className="flex justify-between items-start mb-3 px-4">
+        <div>
+          <h3 className="font-bold text-gray-800 text-[15px] mb-1">Invoice to:</h3>
+          <h2 className="text-[17px] font-bold text-gray-900">{bill.customer}</h2>
+          <p className="text-[11px] text-gray-600 mt-1 max-w-[200px] leading-relaxed">
+             Vehicle: {bill.vehicle} <br/>
+             Location, City, India <br/>
+             ZIP 123456
+          </p>
+        </div>
+        <div className="w-64 text-[13px] pt-1">
+          <div className="flex justify-between mb-2">
+            <span className="font-bold text-gray-800">Invoice#</span>
+            <span className="font-medium text-gray-600">{bill.id.replace('INV-', '')}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-bold text-gray-800">Date</span>
+            <span className="font-medium text-gray-600">{bill.date}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4 & 5. Table */}
+      <div className="px-4 flex flex-col mb-6">
+        <div className="border border-gray-200 rounded-sm overflow-hidden flex flex-col">
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-[#2D3035] text-white">
+              <tr>
+                <th className="py-2.5 px-4 text-left w-12 font-semibold text-[11px]">SL.</th>
+                <th className="py-2.5 px-4 text-left font-semibold text-[11px]">Item Description</th>
+                <th className="py-2.5 px-4 text-center font-semibold text-[11px]">Price</th>
+                <th className="py-2.5 px-4 text-center font-semibold text-[11px]">Qty.</th>
+                <th className="py-2.5 px-4 text-right font-semibold text-[11px]">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bill.rawItems?.map((item, idx) => (
+                <tr key={idx} className="border-b border-gray-200 bg-white">
+                  <td className="py-3.5 px-4 text-gray-800 text-[11px] font-bold">{idx + 1}</td>
+                  <td className="py-3.5 px-4 text-gray-800 text-[11px] font-bold">{item.itemName || item.service?.itemName || 'Unknown Item'}</td>
+                  <td className="py-3.5 px-4 text-center text-gray-600 text-[11px] font-semibold">₹{item.price.toLocaleString()}</td>
+                  <td className="py-3.5 px-4 text-center text-gray-600 text-[11px] font-semibold">{item.quantity}</td>
+                  <td className="py-3.5 px-4 text-right text-gray-600 text-[11px] font-semibold">₹{(item.price * item.quantity).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 6. Bottom Section (Totals) */}
+      <div className="flex justify-between items-start mt-2 px-4">
+        <div className="w-1/2 pr-8">
+          <p className="text-[13px] font-bold text-gray-800 mb-5">Thank you for your business</p>
+          
+          <div className="mb-5">
+            <h4 className="font-bold text-gray-800 text-[11px] mb-1">Terms & Conditions</h4>
+            <p className="text-[9px] text-gray-500 leading-relaxed pr-10">
+              All parts remain our property until paid in full. No returns on electrical goods.
+            </p>
+          </div>
+          
+          <div>
+            <h4 className="font-bold text-gray-800 text-[11px] mb-2">Payment Info:</h4>
+            <table className="text-[9px] text-gray-500 w-full">
+              <tbody>
+                <tr>
+                  <td className="font-bold text-gray-600 w-20 pb-1">Status:</td>
+                  <td className="pb-1 text-gray-800 font-semibold">{bill.status}</td>
+                </tr>
+                <tr>
+                  <td className="font-bold text-gray-600 pb-1">Method:</td>
+                  <td className="pb-1 text-gray-800 font-semibold">{bill.paymentMethod || 'N/A'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="w-[45%]">
+          <div className="flex justify-between text-[11px] font-bold text-gray-800 mb-2.5 px-6">
+            <span>Sub Total:</span>
+            <span>₹{bill.amount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[11px] font-bold text-gray-800 mb-4 px-6">
+            <span>Tax:</span>
+            <span>0.00%</span>
+          </div>
+          <div className="flex justify-between py-2.5 px-6 bg-[#FFC107] font-bold text-gray-900 text-[13px] mt-6">
+            <span>Total:</span>
+            <span>₹{bill.amount.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. Footer */}
+      <div className="mt-8 px-4 mb-2">
+        <div className="flex justify-between items-end mt-12">
+          <div className="flex gap-4 text-[10px] font-bold text-gray-800 border-t-[2px] border-[#FFC107] pt-3 w-[55%]">
+            <span>Phone #</span>
+            <span className="text-gray-300">|</span>
+            <span>Address</span>
+            <span className="text-gray-300">|</span>
+            <span>Website</span>
+          </div>
+          <div className="text-center w-[30%]">
+            <div className="border-b border-gray-400 w-full mb-2"></div>
+            <span className="font-bold text-[10px] text-gray-800">Authorised Sign</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  function markPaid(id) {
+    fetch(`http://localhost:5000/api/bills/${id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Paid' })
+    }).then(() => {
+      Swal.fire({ title: 'Success', text: 'Bill marked as Paid', icon: 'success', timer: 1500, showConfirmButton: false })
+      loadData()
+    }).catch(err => {
+      console.error(err)
+      Swal.fire({ title: 'Error', text: 'Failed to update status', icon: 'error' })
+    })
+  }
+
+  return (
+    <div className="p-4 md:p-7 flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-2">
+          {['All', 'Paid', 'Pending', 'Unpaid'].map(f => (
+            <button key={f} onClick={() => setFilter(f)} className={`px-4 py-1.5 rounded-sm text-sm font-semibold border transition-all cursor-pointer ${filter === f ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-3">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Search by name or ID..." value={search} onChange={e => setSearch(e.target.value)} className="border border-gray-200 rounded-sm pl-9 pr-3 py-1.5 text-sm outline-none focus:border-blue-400 w-full sm:w-56" />
+          </div>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-1.5 rounded-sm transition-colors cursor-pointer">
+            <Plus size={16} /> New Invoice
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['Invoice ID', 'Customer', 'Vehicle', 'Items', 'Details', 'Total Amount', 'Date', 'Status', 'Action'].map(h => (
+                  <th key={h} className="text-left py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={9} className="text-center py-10 text-gray-400">No bills found.</td></tr>
+              ) : filtered.map(bill => (
+                <tr key={bill.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <td className="py-3 px-4 font-bold text-blue-600">{bill.id}</td>
+                  <td className="py-3 px-4 text-gray-700">{bill.customer}</td>
+                  <td className="py-3 px-4 text-gray-500">{bill.vehicle}</td>
+                  <td className="py-3 px-4 text-gray-700">{bill.service}</td>
+                  <td className="py-3 px-4 text-gray-500 text-xs truncate max-w-[200px]">{bill.parts || '-'}</td>
+                  <td className="py-3 px-4 font-bold text-gray-800">₹{bill.amount.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-gray-500">{bill.date}</td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2.5 py-1 rounded text-xs font-semibold ${statusStyle[bill.status] || statusStyle.Pending}`}>{bill.status}</span>
+                  </td>
+                  <td className="py-3 px-4 flex items-center gap-2">
+                    <button onClick={() => setViewBill(bill)} className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer" title="View">
+                      <Eye size={16} />
+                    </button>
+                    <button onClick={() => handleEdit(bill)} className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer" title="Edit">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => handleDelete(bill._id)} className="text-gray-400 hover:text-red-600 transition-colors cursor-pointer" title="Delete">
+                      <Trash2 size={16} />
+                    </button>
+                    {bill.status === 'Pending' && (
+                      <button onClick={() => markPaid(bill._id)} className="text-green-500 hover:text-green-700 transition-colors cursor-pointer" title="Mark Paid">
+                        <CheckCircle size={16} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-sm p-6 w-full max-w-lg shadow max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">{editingId ? 'Edit Invoice' : 'Create New Invoice'}</h2>
+            <form onSubmit={handleAdd} className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Customer Name</label>
+                  <CreatableSelect 
+                    options={customers.map(c => ({ value: c._id, label: c.name }))}
+                    value={form.customer ? { value: form.customer, label: customers.find(c => c._id === form.customer)?.name } : (newCustomerName ? { value: newCustomerName, label: newCustomerName } : null)}
+                    onChange={opt => {
+                      if (opt && opt.__isNew__) {
+                        setNewCustomerName(opt.value);
+                        setForm({ ...form, customer: '', vehicle: '' });
+                      } else {
+                        setNewCustomerName('');
+                        setForm({ ...form, customer: opt ? opt.value : '', vehicle: '' });
+                      }
+                    }}
+                    placeholder="Select or type new..."
+                    isClearable
+                    className="text-sm"
+                    styles={{ control: base => ({ ...base, borderColor: '#e5e7eb', borderRadius: '0.125rem' }) }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Vehicle</label>
+                  <Select 
+                    options={vehicles.filter(v => v.customer?._id === form.customer).map(v => ({ value: v._id, label: `${v.licensePlate} (${v.make})` }))}
+                    value={form.vehicle ? { value: form.vehicle, label: vehicles.find(v => v._id === form.vehicle)?.licensePlate } : null}
+                    onChange={opt => setForm({ ...form, vehicle: opt ? opt.value : '' })}
+                    isDisabled={!form.customer}
+                    placeholder="Select vehicle..."
+                    isClearable
+                    className="text-sm"
+                    styles={{ control: base => ({ ...base, borderColor: '#e5e7eb', borderRadius: '0.125rem' }) }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-sm border border-gray-200 mt-2">
+                <label className="text-xs font-bold text-gray-700 mb-2 block">Add Service / Part from Catalog</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1">
+                    <Select 
+                      options={productsList.map(p => ({ value: p._id, label: `${p.itemName} - ₹${p.price}` }))}
+                      value={partSearch ? { value: partSearch, label: `${productsList.find(p => p._id === partSearch)?.itemName} - ₹${productsList.find(p => p._id === partSearch)?.price}` } : null}
+                      onChange={opt => {
+                        setPartSearch(opt ? opt.value : '');
+                        if (opt) {
+                          const p = productsList.find(x => x._id === opt.value);
+                          setPartPrice(p ? p.price : 0);
+                        } else {
+                          setPartPrice(0);
+                        }
+                      }}
+                      placeholder="Type to search catalog..."
+                      isClearable
+                      className="text-sm"
+                      styles={{ control: base => ({ ...base, borderColor: '#e5e7eb', borderRadius: '0.125rem' }) }}
+                    />
+                  </div>
+                  <input type="number" min="0" value={partPrice} onChange={e => setPartPrice(Number(e.target.value))} className="w-20 border border-gray-300 rounded-sm px-2 py-1.5 text-sm outline-none focus:border-blue-400" title="Rate (₹)" />
+                  <input type="number" min="1" value={qty} onChange={e => setQty(Number(e.target.value))} className="w-16 border border-gray-300 rounded-sm px-2 py-1.5 text-sm outline-none focus:border-blue-400" title="Quantity" />
+                  <button type="button" onClick={handleAddPart} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-sm text-sm font-semibold transition-colors cursor-pointer">
+                    Add
+                  </button>
+                </div>
+                
+                {selectedParts.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    {selectedParts.map((p, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded-sm text-sm">
+                        <span className="font-semibold text-gray-700">{p.itemName} x{p.quantity}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-blue-600 font-bold">₹{p.price * p.quantity}</span>
+                          <button type="button" onClick={() => removePart(idx)} className="text-red-500 hover:text-red-700 cursor-pointer"><X size={14} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between mt-2">
+                <div className="w-1/2 pr-3">
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Payment Method</label>
+                  <select 
+                    value={form.paymentMethod} 
+                    onChange={e => setForm({ ...form, paymentMethod: e.target.value })}
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
+                  >
+                    <option value="Unpaid">Unpaid (Pending)</option>
+                    <option value="Cash">Cash (Paid)</option>
+                    <option value="Online">Online (Paid)</option>
+                  </select>
+                </div>
+                <div className="w-1/2 flex items-center justify-between bg-blue-50 text-blue-800 p-3 rounded-sm border border-blue-200 font-bold text-lg">
+                  <span>Grand Total:</span>
+                  <span>₹{form.amount.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-3">
+                <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-sm transition-colors cursor-pointer">{editingId ? 'Save Changes' : 'Generate Invoice'}</button>
+                <button type="button" onClick={() => { setShowModal(false); setEditingId(null); setForm(empty); setSelectedParts([]); setNewCustomerName(''); }} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-sm hover:bg-gray-50 cursor-pointer">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {viewBill && (
+        <div className="fixed inset-0 bg-gray-500/50 flex justify-center items-start z-50 p-4 sm:p-8 overflow-y-auto">
+          <div className="w-max shadow-xl relative mt-10 mb-10 bg-white shrink-0">
+            <div className="absolute top-4 right-4 flex gap-3 z-10">
+              <button onClick={handleDownloadPdf} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors">Download PDF</button>
+              <button onClick={() => setViewBill(null)} className="text-gray-400 hover:text-red-500 cursor-pointer bg-white p-1 rounded-full shadow-sm">
+                <X size={24} />
+              </button>
+            </div>
+            {renderInvoiceTemplate(viewBill, 'view-invoice-receipt')}
+          </div>
+        </div>
+      )}
+
+      {/* Hidden container for direct PDF download */}
+      <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+        {printBill && renderInvoiceTemplate(printBill, 'print-invoice-receipt')}
+      </div>
+    </div>
+  )
+}
