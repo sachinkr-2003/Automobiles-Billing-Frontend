@@ -21,7 +21,7 @@ export default function Vehicles() {
   const [editingId, setEditingId] = useState(null)
 
   const loadData = () => {
-    fetch('http://localhost:5000/api/vehicles')
+    fetch(`${import.meta.env.VITE_API_URL}/vehicles`)
       .then(res => res.json())
       .then(data => {
         const mapped = data.map(v => ({
@@ -42,7 +42,7 @@ export default function Vehicles() {
       })
       .catch(console.error)
 
-    fetch('http://localhost:5000/api/customers')
+    fetch(`${import.meta.env.VITE_API_URL}/customers`)
       .then(res => res.json())
       .then(setCustomers)
       .catch(console.error)
@@ -62,7 +62,7 @@ export default function Vehicles() {
   function handleAdd(e) {
     e.preventDefault()
 
-    const url = editingId ? `http://localhost:5000/api/vehicles/${editingId}` : 'http://localhost:5000/api/vehicles'
+    const url = editingId ? `${import.meta.env.VITE_API_URL}/vehicles/${editingId}` : `${import.meta.env.VITE_API_URL}/vehicles`
     const method = editingId ? 'PUT' : 'POST'
 
     fetch(url, {
@@ -114,7 +114,7 @@ export default function Vehicles() {
       confirmButtonText: 'Yes, delete it!'
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`http://localhost:5000/api/vehicles/${id}`, { method: 'DELETE' })
+        fetch(`${import.meta.env.VITE_API_URL}/vehicles/${id}`, { method: 'DELETE' })
           .then(() => {
             Swal.fire('Deleted!', 'Vehicle has been deleted.', 'success')
             loadData()

@@ -35,7 +35,7 @@ export default function Billing() {
   const [newCustomerName, setNewCustomerName] = useState('')
 
   const loadData = () => {
-    fetch('http://localhost:5000/api/bills').then(r=>r.json()).then(data => {
+    fetch(`${import.meta.env.VITE_API_URL}/bills`).then(r=>r.json()).then(data => {
       const mapped = data.map(b => ({
         id: `INV-${b._id.slice(-6).toUpperCase()}`,
         _id: b._id,
@@ -54,9 +54,9 @@ export default function Billing() {
       setBills(mapped)
     }).catch(console.error)
 
-    fetch('http://localhost:5000/api/customers').then(r=>r.json()).then(setCustomers)
-    fetch('http://localhost:5000/api/vehicles').then(r=>r.json()).then(setVehicles)
-    fetch('http://localhost:5000/api/products').then(r=>r.json()).then(setProductsList)
+    fetch(`${import.meta.env.VITE_API_URL}/customers`).then(r=>r.json()).then(setCustomers)
+    fetch(`${import.meta.env.VITE_API_URL}/vehicles`).then(r=>r.json()).then(setVehicles)
+    fetch(`${import.meta.env.VITE_API_URL}/products`).then(r=>r.json()).then(setProductsList)
   }
 
   useEffect(() => { loadData() }, [])
@@ -107,7 +107,7 @@ export default function Billing() {
     let customerId = form.customer;
     if (newCustomerName) {
       try {
-        const res = await fetch('http://localhost:5000/api/customers', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/customers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: newCustomerName, phone: '0000000000' })
@@ -126,7 +126,7 @@ export default function Billing() {
       return
     }
 
-    const url = editingId ? `http://localhost:5000/api/bills/${editingId}` : 'http://localhost:5000/api/bills'
+    const url = editingId ? `${import.meta.env.VITE_API_URL}/bills/${editingId}` : `${import.meta.env.VITE_API_URL}/bills`
     const method = editingId ? 'PUT' : 'POST'
 
     fetch(url, {
@@ -214,7 +214,7 @@ export default function Billing() {
       confirmButtonText: 'Yes, delete it!'
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`http://localhost:5000/api/bills/${id}`, { method: 'DELETE' })
+        fetch(`${import.meta.env.VITE_API_URL}/bills/${id}`, { method: 'DELETE' })
           .then(() => {
             Swal.fire('Deleted!', 'Invoice has been deleted.', 'success')
             loadData()
@@ -432,7 +432,7 @@ export default function Billing() {
   );
 
   function markPaid(id) {
-    fetch(`http://localhost:5000/api/bills/${id}/status`, {
+    fetch(`${import.meta.env.VITE_API_URL}/bills/${id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Paid' })

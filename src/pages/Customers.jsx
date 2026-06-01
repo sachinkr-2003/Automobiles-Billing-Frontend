@@ -12,7 +12,7 @@ export default function Customers() {
   const [editingId, setEditingId] = useState(null)
 
   const loadCustomers = () => {
-    fetch('http://localhost:5000/api/customers')
+    fetch(`${import.meta.env.VITE_API_URL}/customers`)
       .then(res => res.json())
       .then(data => {
          const mapped = data.map(c => ({
@@ -43,7 +43,7 @@ export default function Customers() {
   async function handleAdd(e) {
     e.preventDefault()
     try {
-      const url = editingId ? `http://localhost:5000/api/customers/${editingId}` : 'http://localhost:5000/api/customers'
+      const url = editingId ? `${import.meta.env.VITE_API_URL}/customers/${editingId}` : `${import.meta.env.VITE_API_URL}/customers`
       const method = editingId ? 'PUT' : 'POST'
 
       const res = await fetch(url, {
@@ -54,7 +54,7 @@ export default function Customers() {
       const customer = await res.json()
       
       if (!editingId && form.plate) {
-        await fetch('http://localhost:5000/api/vehicles', {
+        await fetch(`${import.meta.env.VITE_API_URL}/vehicles`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -101,7 +101,7 @@ export default function Customers() {
       confirmButtonText: 'Yes, delete it!'
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`http://localhost:5000/api/customers/${id}`, { method: 'DELETE' })
+        fetch(`${import.meta.env.VITE_API_URL}/customers/${id}`, { method: 'DELETE' })
           .then(() => {
             Swal.fire('Deleted!', 'Customer has been deleted.', 'success')
             loadCustomers()

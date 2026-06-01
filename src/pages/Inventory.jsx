@@ -13,7 +13,7 @@ export default function Inventory() {
   const [form, setForm] = useState(empty)
 
   const loadData = () => {
-    fetch('http://localhost:5000/api/products')
+    fetch(`${import.meta.env.VITE_API_URL}/products`)
       .then(r => r.json())
       .then(data => {
         const parts = data.filter(d => d.type === 'Part').map(p => ({
@@ -39,7 +39,7 @@ export default function Inventory() {
 
   function handleAdd(e) {
     e.preventDefault()
-    fetch('http://localhost:5000/api/products', {
+    fetch(`${import.meta.env.VITE_API_URL}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

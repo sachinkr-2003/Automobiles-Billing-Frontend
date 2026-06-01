@@ -22,9 +22,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:5000/api/bills').then(r => r.json()),
-      fetch('http://localhost:5000/api/customers').then(r => r.json()),
-      fetch('http://localhost:5000/api/vehicles').then(r => r.json()),
+      fetch(`${import.meta.env.VITE_API_URL}/bills`).then(r => r.json()),
+      fetch(`${import.meta.env.VITE_API_URL}/customers`).then(r => r.json()),
+      fetch(`${import.meta.env.VITE_API_URL}/vehicles`).then(r => r.json()),
     ]).then(([billsData, customersData, vehiclesData]) => {
       
       const totalRevenue = billsData.reduce((acc, b) => acc + b.totalAmount, 0)

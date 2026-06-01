@@ -8,7 +8,7 @@ export default function Reports() {
   const [totalBills, setTotalBills] = useState(0)
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/bills')
+    fetch(`${import.meta.env.VITE_API_URL}/bills`)
       .then(r => r.json())
       .then(bills => {
         // Compute revenue and bills

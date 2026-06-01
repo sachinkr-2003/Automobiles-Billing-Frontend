@@ -38,7 +38,7 @@ export default function Settings() {
     if (!token) return
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/update', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/update`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -67,7 +67,7 @@ export default function Settings() {
     if (!token) return
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/update', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/update`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

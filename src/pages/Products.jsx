@@ -23,7 +23,7 @@ export default function Products() {
   const [editingId, setEditingId] = useState(null)
 
   const loadServices = () => {
-    fetch('http://localhost:5000/api/products')
+    fetch(`${import.meta.env.VITE_API_URL}/products`)
       .then(res => res.json())
       .then(data => {
         const mapped = data.map(s => ({
@@ -51,7 +51,7 @@ export default function Products() {
   function handleAdd(e) {
     e.preventDefault()
 
-    const url = editingId ? `http://localhost:5000/api/products/${editingId}` : 'http://localhost:5000/api/products'
+    const url = editingId ? `${import.meta.env.VITE_API_URL}/products/${editingId}` : `${import.meta.env.VITE_API_URL}/products`
     const method = editingId ? 'PUT' : 'POST'
 
     fetch(url, {
@@ -99,7 +99,7 @@ export default function Products() {
       confirmButtonText: 'Yes, delete it!'
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`http://localhost:5000/api/products/${id}`, { method: 'DELETE' })
+        fetch(`${import.meta.env.VITE_API_URL}/products/${id}`, { method: 'DELETE' })
           .then(() => {
             Swal.fire('Deleted!', 'Item has been deleted.', 'success')
             loadServices()
