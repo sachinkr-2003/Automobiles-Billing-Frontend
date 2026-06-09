@@ -201,8 +201,9 @@ export default function Billing() {
       )
       Swal.fire({ title: 'Email Sent! 📧', text: `Invoice sent to ${email}`, icon: 'success', timer: 2500, showConfirmButton: false })
     } catch (err) {
-      console.error(err)
-      Swal.fire({ title: 'Email Failed', text: 'EmailJS keys check karo .env mein.', icon: 'error' })
+      console.error('EmailJS Error:', err)
+      const errorMessage = err?.text || err?.message || JSON.stringify(err) || 'Unknown error'
+      Swal.fire({ title: 'Email Failed', text: `Error: ${errorMessage}`, icon: 'error' })
     }
   }
 
