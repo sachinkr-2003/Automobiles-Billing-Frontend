@@ -125,17 +125,21 @@ export default function Billing() {
     ).join('\n') || ''
 
     const msg = encodeURIComponent(
-      `Hello *${bill.customer}* 👋\n\n` +
-      `Your invoice has been generated at *AutoBill Service Center*.\n\n` +
-      `📋 *Invoice Details:*\n` +
-      `• Invoice No: *${bill.id}*\n` +
-      `• Vehicle: ${bill.vehicle}\n` +
-      `• Date: ${bill.date}\n\n` +
-      `🔧 *Services/Parts:*\n${items}\n\n` +
-      `💰 *Total Amount: ₹${bill.amount?.toLocaleString()}*\n` +
-      `• Payment: ${bill.paymentMethod || 'N/A'}\n` +
-      `• Status: ${bill.status}\n\n` +
-      `Thank you for choosing AutoBill! 🚗`
+      `🚗 *AutoBill Service Center* 🚗\n` +
+      `------------------------------------\n` +
+      `Hello *${bill.customer}*, 👋\n` +
+      `Thank you for visiting us! Your invoice has been generated successfully.\n\n` +
+      `📋 *INVOICE SUMMARY*\n` +
+      `🔹 *Invoice No:* ${bill.id}\n` +
+      `🔹 *Vehicle:* ${bill.vehicle}\n` +
+      `🔹 *Date:* ${bill.date}\n\n` +
+      `🔧 *SERVICES & PARTS*\n${items}\n` +
+      `------------------------------------\n` +
+      `💰 *GRAND TOTAL: ₹${bill.amount?.toLocaleString()}*\n` +
+      `💳 *Payment Mode:* ${bill.paymentMethod || 'N/A'}\n` +
+      `📊 *Status:* ${bill.status === 'Paid' ? '✅ Paid' : '⏳ ' + bill.status}\n` +
+      `------------------------------------\n\n` +
+      `🙏 We appreciate your business. Have a great day and drive safely! 🛣️✨`
     )
     window.open(`https://wa.me/${indiaPhone}?text=${msg}`, '_blank')
   }
