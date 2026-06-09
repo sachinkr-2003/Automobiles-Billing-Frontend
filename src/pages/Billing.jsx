@@ -144,63 +144,6 @@ export default function Billing() {
     window.open(`https://wa.me/${indiaPhone}?text=${msg}`, '_blank')
   }
 
-  const [emailBill, setEmailBill] = useState(null)
-
-  useEffect(() => {
-    if (!emailBill) return;
-
-    const processEmail = async () => {
-      try {
-        Swal.fire({ title: 'Preparing Email...', text: 'Generating PDF Attachment...', icon: 'info', showConfirmButton: false })
-        
-        const blob = await generatePDFFromElement('email-invoice-receipt', `Invoice_${emailBill.id}.pdf`, true)
-        
-        const reader = new FileReader()
-        reader.readAsDataURL(blob)
-        reader.onloadend = async () => {
-          const base64data = reader.result
-          
-          let email = emailBill.customerEmail
-          const itemsHtml = emailBill.rawItems?.map((item, i) =>
-            `${i + 1}. ${item.itemName || 'Item'} x${item.quantity} = ₹${(item.price * item.quantity).toLocaleString()}`
-          ).join('\n') || ''
-
-          Swal.fire({ title: 'Sending Email...', text: 'Uploading to EmailJS...', icon: 'info', showConfirmButton: false })
-          
-          await emailjs.send(
-            EMAILJS_SERVICE_ID,
-            EMAILJS_TEMPLATE_ID,
-            {
-              email:          email,
-              to_email:       email,
-              name:           emailBill.customer,
-              to_name:        emailBill.customer,
-              invoice_id:     emailBill.id,
-              vehicle:        emailBill.vehicle,
-              amount:         `₹${emailBill.amount?.toLocaleString()}`,
-              date:           emailBill.date,
-              status:         emailBill.status,
-              payment_method: emailBill.paymentMethod || 'N/A',
-              items_list:     itemsHtml,
-              content:        base64data, // PDF Attachment
-            },
-            EMAILJS_PUBLIC_KEY
-          )
-          
-          Swal.fire({ title: 'Email Sent! 📧', text: `Invoice & PDF sent to ${email}`, icon: 'success', timer: 2500, showConfirmButton: false })
-          setEmailBill(null)
-        }
-      } catch (err) {
-        console.error('EmailJS Error:', err)
-        const errorMessage = err?.text || err?.message || JSON.stringify(err) || 'Unknown error'
-        Swal.fire({ title: 'Email Failed', text: `Error: ${errorMessage}`, icon: 'error' })
-        setEmailBill(null)
-      }
-    }
-
-    setTimeout(processEmail, 500) // Wait for hidden DOM to render
-  }, [emailBill])
-
   // ─── EmailJS ──────────────────────────────────────────────────────────────────
   async function sendEmail(bill) {
     let email = bill.customerEmail
@@ -235,8 +178,36 @@ export default function Billing() {
       return
     }
 
-    // Trigger PDF generation and email sending
-    setEmailBill(bill)
+    const itemsHtml = bill.rawItems?.map((item, i) =>
+      `${i + 1}. ${item.itemName || 'Item'} x${item.quantity} = ₹${(item.price * item.quantity).toLocaleString()}`
+    ).join('\n') || ''
+
+    try {
+      Swal.fire({ title: 'Sending Email...', text: 'Please wait', icon: 'info', timer: 2000, showConfirmButton: false })
+      await emailjs.send(
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        {
+          email:          email,
+          to_email:       email,
+          name:           bill.customer,
+          to_name:        bill.customer,
+          invoice_id:     bill.id,
+          vehicle:        bill.vehicle,
+          amount:         `₹${bill.amount?.toLocaleString()}`,
+          date:           bill.date,
+          status:         bill.status,
+          payment_method: bill.paymentMethod || 'N/A',
+          items_list:     itemsHtml,
+        },
+        EMAILJS_PUBLIC_KEY
+      )
+      Swal.fire({ title: 'Email Sent! 📧', text: `Invoice sent to ${email}`, icon: 'success', timer: 2500, showConfirmButton: false })
+    } catch (err) {
+      console.error('EmailJS Error:', err)
+      const errorMessage = err?.text || err?.message || JSON.stringify(err) || 'Unknown error'
+      Swal.fire({ title: 'Email Failed', text: `Error: ${errorMessage}`, icon: 'error' })
+    }
   }
 
   // ─── Share Popup (after bill generate) ───────────────────────────────────────
@@ -845,7 +816,6 @@ export default function Billing() {
       {/* Hidden PDF render containers */}
       <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
         {printBill && renderInvoiceTemplate(printBill, 'print-invoice-receipt')}
-        {emailBill && renderInvoiceTemplate(emailBill, 'email-invoice-receipt')}
       </div>
     </div>
   )
