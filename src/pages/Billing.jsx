@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Search, Eye, X, CheckCircle, Pencil, Trash2, MessageCircle, Mail } from 'lucide-react'
 import Select from 'react-select'
 import CreatableSelect from 'react-select/creatable'
-import { toPng } from 'html-to-image'
+import { toPng, toJpeg } from 'html-to-image'
 import jsPDF from 'jspdf'
 import Swal from 'sweetalert2'
 import emailjs from '@emailjs/browser'
@@ -434,7 +434,8 @@ export default function Billing() {
       document.body.appendChild(clone)
 
       setTimeout(() => {
-        toPng(clone, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' })
+        // Use JPEG compression to reduce PDF file size drastically for EmailJS
+        toJpeg(clone, { cacheBust: true, pixelRatio: 1.5, backgroundColor: '#ffffff', quality: 0.8 })
           .then(imgData => {
             document.body.removeChild(clone)
             const img = new Image()
@@ -443,7 +444,7 @@ export default function Billing() {
               const pdf      = new jsPDF('p', 'mm', 'a4')
               const pdfWidth = pdf.internal.pageSize.getWidth()
               const pdfHeight = (img.height * pdfWidth) / img.width
-              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+              pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight)
               
               if (returnBlob) {
                 resolve(pdf.output('blob'))
