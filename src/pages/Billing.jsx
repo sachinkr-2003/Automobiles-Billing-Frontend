@@ -215,20 +215,24 @@ export default function Billing() {
       title: '✅ Invoice Generated!',
       html: `
         <p class="text-gray-500 text-sm mb-1">PDF downloaded successfully.</p>
-        <p class="text-gray-500 text-sm">Customer ko share karna chahte ho?</p>
+        <p class="text-gray-500 text-sm">Customer ko PDF share karna chahte ho?</p>
       `,
       icon: 'success',
       showCancelButton: true,
-      showDenyButton: true,
-      confirmButtonText: '📧 Send Email',
-      denyButtonText: '💬 WhatsApp',
+      confirmButtonText: '📤 Share PDF File',
       cancelButtonText: 'Skip',
       confirmButtonColor: '#2563eb',
-      denyButtonColor: '#25D366',
       cancelButtonColor: '#9ca3af',
     }).then(result => {
-      if (result.isConfirmed) sendEmail(bill)
-      else if (result.isDenied) openWhatsApp(bill)
+      if (result.isConfirmed) {
+        // Since the element might not be rendered anymore if the popup is closed, 
+        // we'll just temporarily set printBill again, but wait, the share API needs user interaction!
+        // The safest way is to render a hidden element and get the blob.
+        // We will call handleShareNative, but we need the HTML.
+        // It's easier to just use the view element if we open the view modal, but let's just trigger it!
+        // Actually, since we need to render the element, we can set viewBill and share it from there.
+        setViewBill(bill)
+      }
     })
   }
 
@@ -385,7 +389,7 @@ export default function Billing() {
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
-  const generatePDFFromElement = (sourceId, filename) => {
+  const generatePDFFromElement = (sourceId, filename, returnBlob = false) => {
     return new Promise((resolve, reject) => {
       const sourceElement = document.getElementById(sourceId)
       if (!sourceElement) return reject(new Error('Layout element not found'))
@@ -410,13 +414,47 @@ export default function Billing() {
               const pdfWidth = pdf.internal.pageSize.getWidth()
               const pdfHeight = (img.height * pdfWidth) / img.width
               pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-              pdf.save(filename)
-              resolve()
+              
+              if (returnBlob) {
+                resolve(pdf.output('blob'))
+              } else {
+                pdf.save(filename)
+                resolve()
+              }
             }
           })
           .catch(err => { document.body.removeChild(clone); reject(new Error('Image render failed: ' + err.message)) })
       }, 500)
     })
+  }
+
+  // ─── Native File Share (Direct PDF on WhatsApp/Email) ─────────────────────────
+  const handleShareNative = async (bill, sourceId) => {
+    try {
+      Swal.fire({ title: 'Preparing PDF...', text: 'Please wait...', icon: 'info', showConfirmButton: false })
+      
+      const blob = await generatePDFFromElement(sourceId, `Invoice_${bill.id}.pdf`, true)
+      const file = new File([blob], `Invoice_${bill.id}.pdf`, { type: 'application/pdf' })
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        Swal.close()
+        await navigator.share({
+          files: [file],
+          title: `Invoice ${bill.id}`,
+          text: `Hello ${bill.customer}, here is your invoice.`,
+        })
+      } else {
+        Swal.fire({ 
+          title: 'Direct Share Not Supported', 
+          text: 'Aapka browser direct file share support nahi karta. PDF download ho jayega, aap ise manually WhatsApp/Email par attach kar sakte hain.', 
+          icon: 'warning' 
+        })
+        generatePDFFromElement(sourceId, `Invoice_${bill.id}.pdf`)
+      }
+    } catch (err) {
+      console.error('Share Error:', err)
+      Swal.fire({ title: 'Error', text: err.message, icon: 'error' })
+    }
   }
 
   // Auto PDF download after bill creation
@@ -612,11 +650,8 @@ export default function Billing() {
                       <button onClick={() => setViewBill(bill)} className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer" title="View Invoice">
                         <Eye size={16} />
                       </button>
-                      <button onClick={() => openWhatsApp(bill)} className="text-gray-400 hover:text-green-500 transition-colors cursor-pointer" title="Send on WhatsApp">
-                        <WhatsAppIcon size={16} />
-                      </button>
-                      <button onClick={() => sendEmail(bill)} className="text-gray-400 hover:text-indigo-500 transition-colors cursor-pointer" title="Send Email">
-                        <Mail size={16} />
+                      <button onClick={() => { setViewBill(bill) }} className="text-gray-400 hover:text-green-500 transition-colors cursor-pointer" title="Share PDF (WhatsApp/Email)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                       </button>
                       <button onClick={() => handleEdit(bill)} className="text-gray-400 hover:text-blue-600 transition-colors cursor-pointer" title="Edit">
                         <Pencil size={16} />
@@ -755,17 +790,14 @@ export default function Billing() {
         <div className="fixed inset-0 bg-gray-500/50 flex justify-center items-start z-50 p-4 sm:p-8 overflow-y-auto">
           <div className="w-max shadow-xl relative mt-10 mb-10 bg-white shrink-0">
             <div className="absolute top-4 right-4 flex gap-2 z-10">
+              <button onClick={() => handleShareNative(viewBill, 'view-invoice-receipt')}
+                className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                Share PDF (WhatsApp/Email)
+              </button>
               <button onClick={handleDownloadPdf}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors">
                 Download PDF
-              </button>
-              <button onClick={() => openWhatsApp(viewBill)}
-                className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors">
-                <WhatsAppIcon size={15} /> WhatsApp
-              </button>
-              <button onClick={() => sendEmail(viewBill)}
-                className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors">
-                <Mail size={15} /> Email
               </button>
               <button onClick={() => setViewBill(null)} className="text-gray-400 hover:text-red-500 cursor-pointer bg-white p-1 rounded-full shadow-sm">
                 <X size={24} />
