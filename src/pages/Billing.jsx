@@ -146,10 +146,31 @@ export default function Billing() {
 
   // ─── EmailJS ──────────────────────────────────────────────────────────────────
   async function sendEmail(bill) {
-    const email = bill.customerEmail
+    let email = bill.customerEmail
     if (!email) {
-      Swal.fire({ title: 'No Email', text: 'Is customer ka email database mein nahi hai.', icon: 'warning' })
-      return
+      const { value: enteredEmail } = await Swal.fire({
+        title: 'No Email Found',
+        text: 'Is customer ka email database mein nahi hai. Naya email daalein:',
+        input: 'email',
+        inputPlaceholder: 'Enter customer email',
+        showCancelButton: true,
+        confirmButtonText: 'Save & Send',
+      })
+      
+      if (!enteredEmail) return
+      
+      email = enteredEmail
+      bill.customerEmail = enteredEmail // update local state
+      
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL}/customers/${bill.customerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: enteredEmail })
+        })
+      } catch (err) {
+        console.error('Failed to update customer email:', err)
+      }
     }
     if (!EMAILJS_SERVICE_ID || EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
       Swal.fire({ title: 'EmailJS Setup Pending', text: '.env mein VITE_EMAILJS_SERVICE_ID, TEMPLATE_ID aur PUBLIC_KEY daalo.', icon: 'info' })
