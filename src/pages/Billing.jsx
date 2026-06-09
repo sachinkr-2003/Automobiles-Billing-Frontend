@@ -187,7 +187,9 @@ export default function Billing() {
         EMAILJS_SERVICE_ID,
         EMAILJS_TEMPLATE_ID,
         {
+          email:          email,
           to_email:       email,
+          name:           bill.customer,
           to_name:        bill.customer,
           invoice_id:     bill.id,
           vehicle:        bill.vehicle,
